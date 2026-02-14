@@ -57,3 +57,8 @@ Desktop.ini
 
 # Gradle wrapper download cache
 gradle-*-bin.zip
+
+# Signing keystores (security - DO NOT commit)
+*.jks
+*.keystore
+release-keystore.jks
