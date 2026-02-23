@@ -2,20 +2,28 @@ package com.psyrax.pokeprices.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     apiKey: String,
-    usdToMxnRate: Double,
+    apiKeyStatus: String?,
     isRefreshingSets: Boolean,
+    usdToMxnRate: Double,
     refreshMessage: String?,
     isUpdatingCards: Boolean,
     updateProgress: String?,
@@ -30,6 +38,7 @@ fun SettingsScreen(
 ) {
     var rateText by remember(usdToMxnRate) { mutableStateOf(String.format("%.2f", usdToMxnRate)) }
     var localApiKey by remember(apiKey) { mutableStateOf(apiKey) }
+    val uriHandler = LocalUriHandler.current
 
     Scaffold(
         topBar = {
@@ -58,10 +67,47 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
-                    Text(
-                        "Obtén tu clave en justtcg.com/dashboard/plans",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // Estado de verificación automática
+                    if (apiKeyStatus != null) {
+                        val isVerifying = apiKeyStatus == "Verificando..."
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (isVerifying) {
+                                CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                            }
+                            Text(
+                                text = apiKeyStatus,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = when {
+                                    isVerifying -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    apiKeyStatus.startsWith("✅") -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.error
+                                }
+                            )
+                        }
+                    }
+                    val linkText = buildAnnotatedString {
+                        append("Obtén tu clave en ")
+                        pushStringAnnotation(tag = "URL", annotation = "https://justtcg.com/")
+                        withStyle(SpanStyle(
+                            color = MaterialTheme.colorScheme.primary,
+                            textDecoration = TextDecoration.Underline
+                        )) {
+                            append("justtcg.com")
+                        }
+                        pop()
+                    }
+                    ClickableText(
+                        text = linkText,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        onClick = { offset ->
+                            linkText.getStringAnnotations("URL", offset, offset)
+                                .firstOrNull()?.let { uriHandler.openUri(it.item) }
+                        }
                     )
                 }
             }

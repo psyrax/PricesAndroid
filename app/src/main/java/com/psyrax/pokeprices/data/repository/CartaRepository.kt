@@ -7,7 +7,9 @@ import com.psyrax.pokeprices.data.model.*
 import com.psyrax.pokeprices.data.remote.RetrofitClient
 import com.psyrax.pokeprices.data.remote.dto.CardDTO
 import com.psyrax.pokeprices.data.remote.dto.GameSetDTO
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 class CartaRepository(
@@ -47,29 +49,37 @@ class CartaRepository(
 
     // === API operations ===
 
-    suspend fun searchCards(query: String, apiKey: String, pageSize: Int = 20): List<CartaWithVariants> {
-        val response = api.searchCards(query = query, pageSize = pageSize, apiKey = apiKey)
-        return response.data.map { mapDtoToCartaWithVariants(it) }
-    }
-
-    suspend fun searchCardsByNameAndSet(cardName: String, setId: String, apiKey: String): List<CartaWithVariants> {
-        val response = api.searchCardsByNameAndSet(query = cardName, setId = setId, apiKey = apiKey)
-        return response.data.map { mapDtoToCartaWithVariants(it) }
-    }
-
-    suspend fun fetchCard(apiId: String, apiKey: String): CartaWithVariants? {
-        return try {
-            val response = api.getCard(cardId = apiId, apiKey = apiKey)
-            mapDtoToCartaWithVariants(response.data)
-        } catch (e: Exception) {
-            null
+    suspend fun searchCards(query: String, apiKey: String, pageSize: Int = 20): List<CartaWithVariants> =
+        withContext(Dispatchers.IO) {
+            val response = api.searchCards(query = query, page = 1, pageSize = pageSize, apiKey = apiKey)
+                .execute().body() ?: throw Exception("Empty response")
+            response.data.map { mapDtoToCartaWithVariants(it) }
         }
-    }
 
-    suspend fun fetchSets(apiKey: String, game: String = "pokemon"): List<GameSetDTO> {
-        val response = api.getSets(game = game, apiKey = apiKey)
-        return response.data
-    }
+    suspend fun searchCardsByNameAndSet(cardName: String, setId: String, apiKey: String): List<CartaWithVariants> =
+        withContext(Dispatchers.IO) {
+            val response = api.searchCardsByNameAndSet(query = cardName, setId = setId, apiKey = apiKey)
+                .execute().body() ?: throw Exception("Empty response")
+            response.data.map { mapDtoToCartaWithVariants(it) }
+        }
+
+    suspend fun fetchCard(apiId: String, apiKey: String): CartaWithVariants? =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = api.getCard(cardId = apiId, apiKey = apiKey)
+                    .execute().body() ?: return@withContext null
+                mapDtoToCartaWithVariants(response.data)
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+    suspend fun fetchSets(apiKey: String, game: String = "pokemon"): List<GameSetDTO> =
+        withContext(Dispatchers.IO) {
+            val response = api.getSets(game = game, orderBy = "release_date", order = "desc", apiKey = apiKey)
+                .execute().body() ?: throw Exception("Empty response")
+            response.data
+        }
 
     suspend fun saveSets(dtos: List<GameSetDTO>) {
         val sets = dtos.map { dto ->
