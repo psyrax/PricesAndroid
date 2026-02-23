@@ -16,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.ui.draw.alpha
 import com.psyrax.pokeprices.data.model.CartaListType
 import com.psyrax.pokeprices.data.model.CartaWithVariants
 import com.psyrax.pokeprices.ui.screens.*
@@ -45,7 +46,25 @@ fun MainNavHost(
 
     // Collect shared state
     val usdToMxnRate by cartaListViewModel.usdToMxnRate.collectAsStateWithLifecycle(initialValue = 18.5)
-    val apiKey by settingsViewModel.apiKey.collectAsStateWithLifecycle(initialValue = "")
+    // null = DataStore aún no ha cargado, "" = cargado y vacío, "xxx" = cargado con valor
+    val apiKeyState by settingsViewModel.apiKeyState.collectAsStateWithLifecycle()
+    val apiKey = apiKeyState ?: ""
+    val hasApiKey = apiKey.isNotEmpty()
+
+    // Redirigir a Config si no hay API key (solo al cargar por primera vez)
+    var initialCheckDone by remember { mutableStateOf(false) }
+    LaunchedEffect(apiKeyState) {
+        val loadedKey = apiKeyState
+        if (loadedKey != null && !initialCheckDone) {
+            initialCheckDone = true
+            if (loadedKey.isEmpty()) {
+                navController.navigate(Screen.Settings.route) {
+                    popUpTo(navController.graph.startDestinationId)
+                    launchSingleTop = true
+                }
+            }
+        }
+    }
 
     // Handle deep link
     val deepLinkCarta by cartaListViewModel.deepLinkCarta.collectAsStateWithLifecycle()
@@ -75,15 +94,29 @@ fun MainNavHost(
             if (showBottomBar) {
                 NavigationBar {
                     bottomNavItems.forEach { item ->
+                        val isSettings = item.screen == Screen.Settings
+                        val enabled = isSettings || hasApiKey
                         NavigationBarItem(
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
+                            icon = {
+                                Icon(
+                                    item.icon,
+                                    contentDescription = item.label,
+                                    modifier = Modifier.alpha(if (enabled) 1f else 0.38f)
+                                )
+                            },
+                            label = {
+                                Text(
+                                    item.label,
+                                    modifier = Modifier.alpha(if (enabled) 1f else 0.38f)
+                                )
+                            },
                             selected = currentRoute == item.screen.route,
                             onClick = {
-                                navController.navigate(item.screen.route) {
-                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
+                                if (enabled) {
+                                    navController.navigate(item.screen.route) {
+                                        popUpTo(navController.graph.startDestinationId)
+                                        launchSingleTop = true
+                                    }
                                 }
                             }
                         )
@@ -164,11 +197,13 @@ fun MainNavHost(
                 val isUpdatingRate by settingsViewModel.isUpdatingRate.collectAsStateWithLifecycle()
                 val rateUpdateMessage by settingsViewModel.rateUpdateMessage.collectAsStateWithLifecycle()
                 val cartaCount by settingsViewModel.cartaCount.collectAsStateWithLifecycle()
+                val apiKeyStatus by settingsViewModel.apiKeyStatus.collectAsStateWithLifecycle()
 
                 SettingsScreen(
                     apiKey = apiKey,
-                    usdToMxnRate = currentRate,
+                    apiKeyStatus = apiKeyStatus,
                     isRefreshingSets = isRefreshingSets,
+                    usdToMxnRate = currentRate,
                     refreshMessage = refreshMessage,
                     isUpdatingCards = isUpdatingCards,
                     updateProgress = updateProgress,

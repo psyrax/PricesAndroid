@@ -1,6 +1,7 @@
 package com.psyrax.pokeprices.ui.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.psyrax.pokeprices.PokePricesApp
@@ -55,6 +56,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                     repository.searchCards(query, apiKey, pageSize = 30)
                 }
             } catch (e: Exception) {
+                Log.e("PokePrices", "performSearch error", e)
                 _errorMessage.value = "Error al buscar: ${e.message}"
             }
             _isSearching.value = false

@@ -1,6 +1,7 @@
 package com.psyrax.pokeprices.ui.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.psyrax.pokeprices.PokePricesApp
@@ -16,8 +17,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val currencyRepository = app.currencyRepository
     val settingsDataStore = app.settingsDataStore
 
-    val apiKey: Flow<String> = settingsDataStore.apiKey
     val usdToMxnRate: Flow<Double> = settingsDataStore.usdToMxnRate
+
+    // StateFlow hot: null = DataStore aún no cargó, "" = sin key, "xxx" = key configurada
+    val apiKeyState: StateFlow<String?> = settingsDataStore.apiKey
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _isRefreshingSets = MutableStateFlow(false)
     val isRefreshingSets: StateFlow<Boolean> = _isRefreshingSets
@@ -40,11 +44,42 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _cartaCount = MutableStateFlow(0)
     val cartaCount: StateFlow<Int> = _cartaCount
 
+    private val _apiKeyStatus = MutableStateFlow<String?>(null)
+    val apiKeyStatus: StateFlow<String?> = _apiKeyStatus
+
     init {
         viewModelScope.launch {
             repository.getForSaleCartas().combine(repository.getWantToBuyCartas()) { a, b ->
                 a.size + b.size
             }.collect { _cartaCount.value = it }
+        }
+
+        // Auto-verificar y cargar sets cuando el usuario cambia la API key
+        viewModelScope.launch {
+            settingsDataStore.apiKey
+                .drop(1)                  // omitir el valor guardado al iniciar la app
+                .filter { it.isNotEmpty() }
+                .distinctUntilChanged()
+                .debounce(1500)           // esperar 1.5s después de que el usuario deje de escribir
+                .collect { key -> autoVerifyAndRefreshSets(key) }
+        }
+    }
+
+    private fun autoVerifyAndRefreshSets(key: String) {
+        viewModelScope.launch {
+            _isRefreshingSets.value = true
+            _apiKeyStatus.value = "Verificando..."
+            _refreshMessage.value = null
+            try {
+                val dtos = repository.fetchSets(key)
+                repository.saveSets(dtos)
+                _apiKeyStatus.value = "✅ API Key válida"
+                _refreshMessage.value = "✅ ${dtos.size} sets cargados automáticamente"
+            } catch (e: Exception) {
+                Log.e("PokePrices", "autoVerifyAndRefreshSets error", e)
+                _apiKeyStatus.value = "❌ API Key inválida o sin conexión"
+            }
+            _isRefreshingSets.value = false
         }
     }
 
@@ -65,6 +100,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 repository.saveSets(dtos)
                 _refreshMessage.value = "✅ ${dtos.size} sets actualizados"
             } catch (e: Exception) {
+                Log.e("PokePrices", "refreshSets error", e)
                 _refreshMessage.value = "❌ Error: ${e.message}"
             }
             _isRefreshingSets.value = false
@@ -80,6 +116,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 settingsDataStore.saveUsdToMxnRate(newRate)
                 _rateUpdateMessage.value = "✅ Tasa actualizada: ${"%.2f".format(newRate)} MXN"
             } catch (e: Exception) {
+                Log.e("PokePrices", "updateExchangeRate error", e)
                 _rateUpdateMessage.value = "❌ Error: ${e.message}"
             }
             _isUpdatingRate.value = false
